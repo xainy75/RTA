@@ -1,0 +1,79 @@
+{
+  "entities": {
+    "ResearchProject": {
+      "title": "Research Project",
+      "description": "A research project uploaded by a student.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Title of the research" },
+        "description": { "type": "string", "description": "Detailed description" },
+        "studentName": { "type": "string", "description": "Name of the student" },
+        "studentUid": { "type": "string", "description": "Firebase Auth UID of the student" },
+        "imageUrl": { "type": "string", "description": "URL to a project banner/image" },
+        "category": { "type": "string", "description": "e.g., Automotive, Robotics, Civil" },
+        "likesCount": { "type": "number", "description": "Total likes", "default": 0 },
+        "promotesCount": { "type": "number", "description": "Total promotes", "default": 0 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "description", "studentName", "studentUid", "category"]
+    },
+    "DiscussionPost": {
+      "title": "Discussion Post",
+      "description": "A community discussion thread.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorUid": { "type": "string" },
+        "category": { "type": "string" },
+        "repliesCount": { "type": "number", "default": 0 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "content", "authorName", "authorUid"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "A reply to a discussion post.",
+      "type": "object",
+      "properties": {
+        "content": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["content", "authorName", "authorUid"]
+    },
+    "Interaction": {
+      "title": "Interaction",
+      "description": "User interaction with a project (like/promote)",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "type": { "type": "string", "enum": ["like", "promote"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "type"]
+    }
+  },
+  "firestore": {
+    "/research_projects": {
+      "schema": "ResearchProject",
+      "description": "Collections of research projects"
+    },
+    "/research_projects/{projectId}/interactions": {
+      "schema": "Interaction",
+      "description": "Subcollection to track user interactions per project"
+    },
+    "/discussions": {
+      "schema": "DiscussionPost",
+      "description": "Community discussion threads"
+    },
+    "/discussions/{postId}/comments": {
+      "schema": "Comment",
+      "description": "Replies to a specific thread"
+    }
+  }
+}

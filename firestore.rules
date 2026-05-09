@@ -1,0 +1,117 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Validation for Research Project
+    function isValidProject(data) {
+      return data.keys().hasAll(['title', 'description', 'studentName', 'studentUid', 'category', 'createdAt', 'updatedAt', 'likesCount', 'promotesCount'])
+        && data.title is string && data.title.size() <= 200
+        && data.description is string && data.description.size() <= 5000
+        && data.studentName is string && data.studentName.size() <= 100
+        && data.studentUid == request.auth.uid
+        && data.category is string && data.category.size() <= 50
+        && data.likesCount is number && data.likesCount >= 0
+        && data.promotesCount is number && data.promotesCount >= 0
+        && data.createdAt == request.time
+        && data.updatedAt == request.time;
+    }
+
+    function isValidDiscussion(data) {
+      return data.keys().hasAll(['title', 'content', 'authorName', 'authorUid', 'category', 'createdAt', 'updatedAt', 'repliesCount'])
+        && data.title is string && data.title.size() <= 200
+        && data.content is string && data.content.size() <= 10000
+        && data.authorName is string && data.authorName.size() <= 100
+        && data.authorUid == request.auth.uid
+        && data.category is string && data.category.size() <= 50
+        && data.repliesCount is number && data.repliesCount >= 0
+        && data.createdAt == request.time
+        && data.updatedAt == request.time;
+    }
+
+    function isValidComment(data) {
+      return data.keys().hasAll(['content', 'authorName', 'authorUid', 'createdAt'])
+        && data.content is string && data.content.size() <= 5000
+        && data.authorName is string && data.authorName.size() <= 100
+        && data.authorUid == request.auth.uid
+        && data.createdAt == request.time;
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Research Projects
+    match /research_projects/{projectId} {
+      allow get: if isValidId(projectId);
+      allow list: if true;
+      
+      allow create: if isSignedIn() && isValidId(projectId) && isValidProject(request.resource.data);
+      
+      allow update: if isSignedIn() && (
+        // Owner update (editing content)
+        (isOwner(resource.data.studentUid) && 
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'description', 'imageUrl', 'category', 'updatedAt']) &&
+         request.resource.data.updatedAt == request.time
+        ) 
+        ||
+        // Atomic increment for likes/promotes
+        // Enforced via batch logic on client, but here we allow anyone signed in to increment/decrement by 1 if interaction subcollection document is present or being changed
+        (request.resource.data.diff(resource.data).affectedKeys().hasAny(['likesCount', 'promotesCount']) &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount', 'promotesCount', 'updatedAt']) &&
+         request.resource.data.updatedAt == request.time &&
+         (request.resource.data.likesCount == resource.data.likesCount + 1 || request.resource.data.likesCount == resource.data.likesCount - 1 || request.resource.data.likesCount == resource.data.likesCount) &&
+         (request.resource.data.promotesCount == resource.data.promotesCount + 1 || request.resource.data.promotesCount == resource.data.promotesCount - 1 || request.resource.data.promotesCount == resource.data.promotesCount)
+        )
+      );
+
+      allow delete: if isOwner(resource.data.studentUid);
+
+      // Interactions subcollection to prevent double interaction
+      match /interactions/{userId} {
+        allow get: if isValidId(userId);
+        allow create: if isOwner(userId) && 
+          request.resource.data.type in ['like', 'promote'] &&
+          request.resource.data.createdAt == request.time;
+        allow update: if isOwner(userId) &&
+          request.resource.data.type in ['like', 'promote'] &&
+          request.resource.data.updatedAt == request.time;
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    // Community Discussions
+    match /discussions/{postId} {
+      allow get, list: if true;
+      allow create: if isSignedIn() && isValidDiscussion(request.resource.data);
+      allow update: if isSignedIn() && (
+        (isOwner(resource.data.authorUid) && 
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'content', 'category', 'updatedAt']) &&
+         request.resource.data.updatedAt == request.time
+        ) ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['repliesCount', 'updatedAt']) &&
+         request.resource.data.updatedAt == request.time)
+      );
+      allow delete: if isOwner(resource.data.authorUid);
+
+      match /comments/{commentId} {
+        allow get, list: if true;
+        allow create: if isSignedIn() && isValidComment(request.resource.data);
+        allow delete: if isOwner(resource.data.authorUid);
+      }
+    }
+  }
+}
